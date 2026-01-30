@@ -1,0 +1,1167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PMO Project Tracker</title>
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f5f5f7; color: #1d1d1f; }
+    #root { min-height: 100vh; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  
+  <script type="text/babel">
+    const { useState, useEffect, useMemo } = React;
+    const { 
+      Search, Download, RefreshCw, Plus, ChevronDown, ChevronUp, MoreVertical, 
+      X, Edit2, Trash2, Network, CheckCircle, AlertCircle, Clock, LogOut 
+    } = lucide;
+
+    // API Base URL
+    const API_URL = window.location.origin + '/api';
+
+    // API Helper
+    const api = {
+      async request(endpoint, options = {}) {
+        const token = localStorage.getItem('token');
+        const headers = {
+          'Content-Type': 'application/json',
+          ...(token && { 'Authorization': `Bearer ${token}` }),
+          ...options.headers
+        };
+
+        const response = await fetch(`${API_URL}${endpoint}`, {
+          ...options,
+          headers
+        });
+
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(error.message || 'API request failed');
+        }
+
+        return response.json();
+      },
+
+      // Auth
+      login: (email, password) => api.request('/auth/login', {
+        method: 'POST',
+        body: JSON.stringify({ email, password })
+      }),
+      register: (data) => api.request('/auth/register', {
+        method: 'POST',
+        body: JSON.stringify(data)
+      }),
+      getMe: () => api.request('/auth/me'),
+
+      // PMs
+      getPMs: () => api.request('/pms'),
+      createPM: (data) => api.request('/pms', {
+        method: 'POST',
+        body: JSON.stringify(data)
+      }),
+
+      // Resources
+      getResources: () => api.request('/resources'),
+      createResource: (data) => api.request('/resources', {
+        method: 'POST',
+        body: JSON.stringify(data)
+      }),
+
+      // Projects
+      getProjects: () => api.request('/projects'),
+      createProject: (data) => api.request('/projects', {
+        method: 'POST',
+        body: JSON.stringify(data)
+      }),
+      deleteProject: (id) => api.request(`/projects/${id}`, {
+        method: 'DELETE'
+      }),
+
+      // Stats
+      getStats: () => api.request('/stats/dashboard'),
+
+      // Seed
+      seed: () => api.request('/seed', { method: 'POST' })
+    };
+
+    // Login Component
+    function LoginPage({ onLogin }) {
+      const [email, setEmail] = useState('');
+      const [password, setPassword] = useState('');
+      const [isLoading, setIsLoading] = useState(false);
+      const [error, setError] = useState('');
+      const [showSetup, setShowSetup] = useState(false);
+
+      const handleLogin = async (e) => {
+        e.preventDefault();
+        setIsLoading(true);
+        setError('');
+
+        try {
+          const data = await api.login(email, password);
+          localStorage.setItem('token', data.token);
+          localStorage.setItem('user', JSON.stringify(data.user));
+          onLogin(data.user);
+        } catch (err) {
+          setError(err.message || 'Login failed');
+        } finally {
+          setIsLoading(false);
+        }
+      };
+
+      const handleSetup = async () => {
+        setIsLoading(true);
+        setError('');
+        
+        try {
+          const result = await api.seed();
+          alert('Setup complete! You can now login with:\\n\\nEmail: admin@pmo.com\\nPassword: admin123');
+          setShowSetup(false);
+        } catch (err) {
+          setError(err.message || 'Setup failed');
+        } finally {
+          setIsLoading(false);
+        }
+      };
+
+      return (
+        <div style={styles.loginContainer}>
+          <div style={styles.loginBox}>
+            <div style={styles.loginHeader}>
+              <svg width="48" height="48" viewBox="0 0 32 32" fill="none">
+                <path d="M16 2L4 8L16 14L28 8L16 2Z" fill="#8B1538" stroke="#8B1538" strokeWidth="2"/>
+                <path d="M4 14L16 20L28 14" stroke="#8B1538" strokeWidth="2" fill="none"/>
+                <path d="M4 20L16 26L28 20" stroke="#8B1538" strokeWidth="2" fill="none"/>
+              </svg>
+              <h1 style={styles.loginTitle}>PMO Tracker</h1>
+              <p style={styles.loginSubtitle}>Project Management System</p>
+            </div>
+
+            {!showSetup ? (
+              <form onSubmit={handleLogin} style={styles.loginForm}>
+                <div style={styles.formGroup}>
+                  <label style={styles.label}>Email</label>
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    style={styles.input}
+                    placeholder="admin@pmo.com"
+                    required
+                  />
+                </div>
+
+                <div style={styles.formGroup}>
+                  <label style={styles.label}>Password</label>
+                  <input
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    style={styles.input}
+                    placeholder="Enter password"
+                    required
+                  />
+                </div>
+
+                {error && (
+                  <div style={styles.error}>{error}</div>
+                )}
+
+                <button
+                  type="submit"
+                  style={styles.loginButton}
+                  disabled={isLoading}
+                >
+                  {isLoading ? 'Logging in...' : 'Login'}
+                </button>
+
+                <div style={styles.setupLink}>
+                  <p>First time setup?</p>
+                  <button
+                    type="button"
+                    onClick={() => setShowSetup(true)}
+                    style={styles.linkButton}
+                  >
+                    Initialize Database
+                  </button>
+                </div>
+              </form>
+            ) : (
+              <div style={styles.setupBox}>
+                <h3>Database Setup</h3>
+                <p style={{ marginBottom: '1rem', color: '#6e6e73' }}>
+                  This will create sample data including an admin user.
+                </p>
+                <button
+                  onClick={handleSetup}
+                  style={styles.loginButton}
+                  disabled={isLoading}
+                >
+                  {isLoading ? 'Setting up...' : 'Run Setup'}
+                </button>
+                <button
+                  onClick={() => setShowSetup(false)}
+                  style={{ ...styles.linkButton, marginTop: '1rem' }}
+                >
+                  Back to Login
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    // Main App Component
+    function PMOApp({ user, onLogout }) {
+      const [activeView, setActiveView] = useState('queue');
+      const [projects, setProjects] = useState([]);
+      const [projectManagers, setProjectManagers] = useState([]);
+      const [resources, setResources] = useState([]);
+      const [stats, setStats] = useState({});
+      const [loading, setLoading] = useState(true);
+      
+      const [showAddProjectModal, setShowAddProjectModal] = useState(false);
+      const [showAddPMModal, setShowAddPMModal] = useState(false);
+      const [showProjectDetailModal, setShowProjectDetailModal] = useState(false);
+      const [selectedProject, setSelectedProject] = useState(null);
+      
+      const [searchTerm, setSearchTerm] = useState('');
+      const [filterStatus, setFilterStatus] = useState('all');
+      const [filterPriority, setFilterPriority] = useState('all');
+      const [sortField, setSortField] = useState('startDate');
+      const [sortDirection, setSortDirection] = useState('desc');
+
+      const [newProject, setNewProject] = useState({
+        name: '', pmId: '', status: 'Planning', health: 'On Track', priority: 'Medium',
+        type: 'Internal', branch: 'Technology', startDate: '', endDate: '', budget: ''
+      });
+
+      const [newPM, setNewPM] = useState({ name: '', email: '', phone: '' });
+
+      useEffect(() => {
+        loadData();
+      }, []);
+
+      const loadData = async () => {
+        try {
+          const [projectsData, pmsData, resourcesData, statsData] = await Promise.all([
+            api.getProjects(),
+            api.getPMs(),
+            api.getResources(),
+            api.getStats()
+          ]);
+
+          setProjects(projectsData);
+          setProjectManagers(pmsData);
+          setResources(resourcesData);
+          setStats(statsData);
+        } catch (error) {
+          console.error('Failed to load data:', error);
+          if (error.message.includes('token')) {
+            onLogout();
+          }
+        } finally {
+          setLoading(false);
+        }
+      };
+
+      const calculateResourceUtilization = (resource) => {
+        let totalAllocation = 0;
+        projects.forEach(project => {
+          if (project.status !== 'Completed') {
+            const assignment = project.resources?.find(r => r.resourceId?._id === resource._id);
+            if (assignment) totalAllocation += assignment.allocation || 0;
+          }
+        });
+        return {
+          planned: resource.plannedCapacity,
+          actual: totalAllocation,
+          utilization: (totalAllocation / resource.plannedCapacity) * 100,
+          available: resource.plannedCapacity - totalAllocation
+        };
+      };
+
+      const capacityMetrics = useMemo(() => {
+        const metrics = { totalCapacity: 0, totalDemand: 0, available: 0, overallocated: 0, underutilized: 0, optimal: 0 };
+        resources.forEach(resource => {
+          const util = calculateResourceUtilization(resource);
+          metrics.totalCapacity += util.planned;
+          metrics.totalDemand += util.actual;
+          metrics.available += Math.max(0, util.available);
+          if (util.utilization > 100) metrics.overallocated++;
+          else if (util.utilization < 60) metrics.underutilized++;
+          else metrics.optimal++;
+        });
+        return metrics;
+      }, [resources, projects]);
+
+      const filteredProjects = useMemo(() => {
+        let filtered = projects.filter(project => {
+          const matchesSearch = project.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                               project.caseId.toLowerCase().includes(searchTerm.toLowerCase());
+          const matchesStatus = filterStatus === 'all' || project.status === filterStatus;
+          const matchesPriority = filterPriority === 'all' || project.priority === filterPriority;
+          return matchesSearch && matchesStatus && matchesPriority;
+        });
+
+        filtered.sort((a, b) => {
+          let aVal = a[sortField];
+          let bVal = b[sortField];
+          if (aVal < bVal) return sortDirection === 'asc' ? -1 : 1;
+          if (aVal > bVal) return sortDirection === 'asc' ? 1 : -1;
+          return 0;
+        });
+
+        return filtered;
+      }, [projects, searchTerm, filterStatus, filterPriority, sortField, sortDirection]);
+
+      const handleAddProject = async () => {
+        if (!newProject.name || !newProject.pmId) {
+          alert('Please fill in required fields');
+          return;
+        }
+
+        try {
+          await api.createProject({
+            ...newProject,
+            budget: parseFloat(newProject.budget) * 100000 || 0
+          });
+          await loadData();
+          setShowAddProjectModal(false);
+          setNewProject({
+            name: '', pmId: '', status: 'Planning', health: 'On Track', priority: 'Medium',
+            type: 'Internal', branch: 'Technology', startDate: '', endDate: '', budget: ''
+          });
+        } catch (error) {
+          alert('Failed to create project: ' + error.message);
+        }
+      };
+
+      const handleAddPM = async () => {
+        if (!newPM.name || !newPM.email) {
+          alert('Please fill in required fields');
+          return;
+        }
+
+        try {
+          await api.createPM(newPM);
+          await loadData();
+          setShowAddPMModal(false);
+          setNewPM({ name: '', email: '', phone: '' });
+        } catch (error) {
+          alert('Failed to add PM: ' + error.message);
+        }
+      };
+
+      const handleDeleteProject = async (projectId) => {
+        if (window.confirm('Are you sure you want to delete this project?')) {
+          try {
+            await api.deleteProject(projectId);
+            await loadData();
+            setShowProjectDetailModal(false);
+          } catch (error) {
+            alert('Failed to delete project: ' + error.message);
+          }
+        }
+      };
+
+      const handleSort = (field) => {
+        if (sortField === field) {
+          setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+        } else {
+          setSortField(field);
+          setSortDirection('asc');
+        }
+      };
+
+      if (loading) {
+        return <div style={styles.loading}>Loading...</div>;
+      }
+
+      return (
+        <div style={styles.app}>
+          <header style={styles.header}>
+            <div style={styles.headerLeft}>
+              <div style={styles.logo}>
+                <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
+                  <path d="M16 2L4 8L16 14L28 8L16 2Z" fill="#8B1538" stroke="#8B1538" strokeWidth="2"/>
+                  <path d="M4 14L16 20L28 14" stroke="#8B1538" strokeWidth="2" fill="none"/>
+                  <path d="M4 20L16 26L28 20" stroke="#8B1538" strokeWidth="2" fill="none"/>
+                </svg>
+                <div>
+                  <div style={styles.logoTitle}>PMO TRACKER</div>
+                  <div style={styles.logoSubtitle}>PROJECT MANAGEMENT</div>
+                </div>
+              </div>
+            </div>
+            <div style={styles.headerRight}>
+              <span style={styles.userName}>{user.name}</span>
+              <div style={styles.userRoleBadge}>{user.role}</div>
+              <div style={styles.userAvatar}>{user.initials}</div>
+              <button onClick={onLogout} style={styles.logoutBtn}>
+                <LogOut size={16} />
+              </button>
+            </div>
+          </header>
+
+          <nav style={styles.nav}>
+            <button
+              style={activeView === 'queue' ? styles.navBtnActive : styles.navBtn}
+              onClick={() => setActiveView('queue')}
+            >
+              Project Queue
+            </button>
+            <button
+              style={activeView === 'capacity' ? styles.navBtnActive : styles.navBtn}
+              onClick={() => setActiveView('capacity')}
+            >
+              Capacity Planning
+            </button>
+            {user.role === 'PMO' && (
+              <button
+                style={activeView === 'pms' ? styles.navBtnActive : styles.navBtn}
+                onClick={() => setActiveView('pms')}
+              >
+                Project Managers
+              </button>
+            )}
+          </nav>
+
+          <main style={styles.main}>
+            {activeView === 'queue' && (
+              <>
+                <div style={styles.pageHeader}>
+                  <div>
+                    <h1 style={styles.pageTitle}>Project Queue</h1>
+                    <p style={styles.pageSubtitle}>Manage and review project portfolio</p>
+                  </div>
+                  {(user.role === 'PMO' || user.role === 'PM') && (
+                    <button style={styles.btnPrimary} onClick={() => setShowAddProjectModal(true)}>
+                      <Download size={16} />
+                      <span>New Project</span>
+                    </button>
+                  )}
+                </div>
+
+                <div style={styles.statsGrid}>
+                  <div style={styles.statCard}>
+                    <div style={styles.statValue}>{stats.total || 0}</div>
+                    <div style={styles.statLabel}>TOTAL</div>
+                  </div>
+                  <div style={{...styles.statCard, ...styles.statGreen}}>
+                    <div style={styles.statValue}>{stats.approved || 0}</div>
+                    <div style={styles.statLabel}>APPROVED</div>
+                  </div>
+                  <div style={{...styles.statCard, ...styles.statOrange}}>
+                    <div style={styles.statValue}>{stats.pending || 0}</div>
+                    <div style={styles.statLabel}>PENDING</div>
+                  </div>
+                  <div style={{...styles.statCard, ...styles.statRed}}>
+                    <div style={styles.statValue}>{stats.rejected || 0}</div>
+                    <div style={styles.statLabel}>REJECTED</div>
+                  </div>
+                  <div style={{...styles.statCard, ...styles.statBlue}}>
+                    <div style={styles.statValue}>{stats.actual || 0}</div>
+                    <div style={styles.statLabel}>ACTUAL</div>
+                  </div>
+                  <div style={styles.statCard}>
+                    <div style={styles.statValue}>{stats.breach || 0}</div>
+                    <div style={styles.statLabel}>BREACH</div>
+                  </div>
+                </div>
+
+                <div style={styles.filtersBar}>
+                  <div style={styles.filtersLabel}>Filters:</div>
+                  <div style={styles.searchBox}>
+                    <Search size={16} />
+                    <input
+                      type="text"
+                      placeholder="Search Case ID..."
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      style={styles.searchInput}
+                    />
+                  </div>
+                  <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} style={styles.filterSelect}>
+                    <option value="all">Status</option>
+                    <option value="Planning">Planning</option>
+                    <option value="In Progress">In Progress</option>
+                    <option value="Completed">Completed</option>
+                  </select>
+                  <select value={filterPriority} onChange={(e) => setFilterPriority(e.target.value)} style={styles.filterSelect}>
+                    <option value="all">Priority</option>
+                    <option value="Critical">Critical</option>
+                    <option value="High">High</option>
+                    <option value="Medium">Medium</option>
+                  </select>
+                  <button style={styles.clearBtn} onClick={() => {
+                    setSearchTerm('');
+                    setFilterStatus('all');
+                    setFilterPriority('all');
+                  }}>Clear</button>
+                </div>
+
+                <div style={styles.tableContainer}>
+                  <div style={styles.tableHeader}>
+                    <h3 style={styles.tableTitle}>Project Queue ({filteredProjects.length} projects)</h3>
+                    <button style={styles.refreshBtn} onClick={loadData}>
+                      <RefreshCw size={16} />
+                      <span>Refresh</span>
+                    </button>
+                  </div>
+
+                  <table style={styles.table}>
+                    <thead>
+                      <tr>
+                        <th style={styles.th} onClick={() => handleSort('caseId')}>CASE ID</th>
+                        <th style={styles.th} onClick={() => handleSort('name')}>PROJECT NAME</th>
+                        <th style={styles.th}>PM</th>
+                        <th style={styles.th}>AMOUNT</th>
+                        <th style={styles.th}>STARTED</th>
+                        <th style={styles.th}>TYPE</th>
+                        <th style={styles.th}>STATUS</th>
+                        <th style={styles.th}>TAT</th>
+                        <th style={styles.th}></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredProjects.map((project) => (
+                        <tr
+                          key={project._id}
+                          style={styles.tr}
+                          onClick={() => {
+                            setSelectedProject(project);
+                            setShowProjectDetailModal(true);
+                          }}
+                        >
+                          <td style={styles.td}>{project.caseId}</td>
+                          <td style={{...styles.td, fontWeight: 600}}>{project.name}</td>
+                          <td style={styles.td}>{project.pmId?.name || 'Unassigned'}</td>
+                          <td style={styles.td}>Rs {(project.budget / 100000).toFixed(2)} Cr</td>
+                          <td style={styles.td}>{new Date(project.startDate).toLocaleDateString('en-GB')}</td>
+                          <td style={styles.td}>{project.type}</td>
+                          <td style={styles.td}>
+                            <span style={getStatusBadgeStyle(project.status)}>
+                              {project.status}
+                            </span>
+                          </td>
+                          <td style={styles.td}>
+                            <span style={styles.tatBadge}>{project.tat || '<1d'}</span>
+                          </td>
+                          <td style={styles.td}>
+                            <button style={styles.menuBtn} onClick={(e) => e.stopPropagation()}>
+                              <MoreVertical size={16} />
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            )}
+
+            {activeView === 'capacity' && (
+              <>
+                <div style={styles.pageHeader}>
+                  <div>
+                    <h1 style={styles.pageTitle}>Resource Capacity Planning</h1>
+                    <p style={styles.pageSubtitle}>Monitor resource utilization</p>
+                  </div>
+                </div>
+
+                <div style={styles.statsGrid}>
+                  <div style={styles.statCard}>
+                    <div style={styles.statValue}>{resources.length}</div>
+                    <div style={styles.statLabel}>TOTAL RESOURCES</div>
+                  </div>
+                  <div style={{...styles.statCard, ...styles.statGreen}}>
+                    <div style={styles.statValue}>{capacityMetrics.optimal}</div>
+                    <div style={styles.statLabel}>OPTIMAL</div>
+                  </div>
+                  <div style={{...styles.statCard, ...styles.statOrange}}>
+                    <div style={styles.statValue}>{capacityMetrics.underutilized}</div>
+                    <div style={styles.statLabel}>UNDER-UTILIZED</div>
+                  </div>
+                  <div style={{...styles.statCard, ...styles.statRed}}>
+                    <div style={styles.statValue}>{capacityMetrics.overallocated}</div>
+                    <div style={styles.statLabel}>OVER-ALLOCATED</div>
+                  </div>
+                  <div style={{...styles.statCard, ...styles.statBlue}}>
+                    <div style={styles.statValue}>
+                      {Math.round((capacityMetrics.totalDemand / capacityMetrics.totalCapacity) * 100) || 0}%
+                    </div>
+                    <div style={styles.statLabel}>UTILIZATION</div>
+                  </div>
+                  <div style={styles.statCard}>
+                    <div style={styles.statValue}>{capacityMetrics.available}h</div>
+                    <div style={styles.statLabel}>AVAILABLE</div>
+                  </div>
+                </div>
+
+                <div style={styles.tableContainer}>
+                  <div style={styles.tableHeader}>
+                    <h3 style={styles.tableTitle}>Resource Utilization ({resources.length} resources)</h3>
+                  </div>
+                  <table style={styles.table}>
+                    <thead>
+                      <tr>
+                        <th style={styles.th}>NAME</th>
+                        <th style={styles.th}>ROLE</th>
+                        <th style={styles.th}>EMAIL</th>
+                        <th style={styles.th}>CAPACITY</th>
+                        <th style={styles.th}>ALLOCATION</th>
+                        <th style={styles.th}>UTILIZATION</th>
+                        <th style={styles.th}>AVAILABLE</th>
+                        <th style={styles.th}>STATUS</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {resources.map(resource => {
+                        const util = calculateResourceUtilization(resource);
+                        const percentage = util.utilization;
+                        let status = 'Optimal', statusClass = 'partial';
+                        if (percentage > 100) { status = 'Over-allocated'; statusClass = 'rejected'; }
+                        else if (percentage < 60) { status = 'Under-utilized'; statusClass = 'pending'; }
+                        
+                        return (
+                          <tr key={resource._id} style={styles.tr}>
+                            <td style={{...styles.td, fontWeight: 600}}>{resource.name}</td>
+                            <td style={styles.td}>{resource.role}</td>
+                            <td style={styles.td}>{resource.email}</td>
+                            <td style={styles.td}>{util.planned}h/week</td>
+                            <td style={styles.td}>{util.actual}h/week</td>
+                            <td style={styles.td}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                                <div style={styles.utilizationBar}>
+                                  <div style={{
+                                    ...styles.utilizationFill,
+                                    width: `${Math.min(percentage, 100)}%`,
+                                    ...getUtilizationColor(statusClass)
+                                  }}></div>
+                                </div>
+                                <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>
+                                  {Math.round(percentage)}%
+                                </span>
+                              </div>
+                            </td>
+                            <td style={styles.td}>{util.available}h</td>
+                            <td style={styles.td}>
+                              <span style={getStatusBadgeStyle(status, statusClass)}>
+                                {status}
+                              </span>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            )}
+
+            {activeView === 'pms' && user.role === 'PMO' && (
+              <>
+                <div style={styles.pageHeader}>
+                  <div>
+                    <h1 style={styles.pageTitle}>Project Managers</h1>
+                    <p style={styles.pageSubtitle}>Manage PM assignments</p>
+                  </div>
+                  <button style={styles.btnPrimary} onClick={() => setShowAddPMModal(true)}>
+                    <Plus size={16} />
+                    <span>Add PM</span>
+                  </button>
+                </div>
+
+                <div style={styles.pmGrid}>
+                  {projectManagers.map(pm => {
+                    const assignedProjects = projects.filter(p => 
+                      pm.assignedProjects.some(apId => apId.toString() === p._id.toString())
+                    );
+                    const inProgress = assignedProjects.filter(p => p.status === 'In Progress').length;
+                    
+                    return (
+                      <div key={pm._id} style={styles.pmCard}>
+                        <div style={styles.pmHeader}>
+                          <div style={styles.pmAvatar}>{pm.initials}</div>
+                          <div>
+                            <h3 style={{ fontSize: '1.1rem', marginBottom: '0.5rem' }}>{pm.name}</h3>
+                            <p style={{ fontSize: '0.85rem', color: '#6e6e73', marginBottom: '0.25rem' }}>{pm.email}</p>
+                            <p style={{ fontSize: '0.85rem', color: '#6e6e73' }}>{pm.phone}</p>
+                          </div>
+                        </div>
+                        <div style={styles.pmStats}>
+                          <div style={{ textAlign: 'center' }}>
+                            <div style={{ fontSize: '1.75rem', fontWeight: 700 }}>{pm.assignedProjects.length}</div>
+                            <div style={{ fontSize: '0.75rem', color: '#6e6e73' }}>TOTAL</div>
+                          </div>
+                          <div style={{ textAlign: 'center' }}>
+                            <div style={{ fontSize: '1.75rem', fontWeight: 700 }}>{inProgress}</div>
+                            <div style={{ fontSize: '0.75rem', color: '#6e6e73' }}>IN PROGRESS</div>
+                          </div>
+                        </div>
+                        <div>
+                          <h4 style={{ fontSize: '0.9rem', marginBottom: '1rem' }}>Assigned Projects</h4>
+                          {assignedProjects.length > 0 ? (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                              {assignedProjects.map(project => (
+                                <div key={project._id} style={styles.pmProjectItem}>
+                                  <span>{project.name}</span>
+                                  <span style={getStatusBadgeStyle(project.status, 'small')}>
+                                    {project.status}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <p style={{ padding: '2rem', textAlign: 'center', color: '#6e6e73' }}>
+                              No projects assigned
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </>
+            )}
+          </main>
+
+          {showAddProjectModal && (
+            <Modal onClose={() => setShowAddProjectModal(false)}>
+              <h2 style={{ fontSize: '1.5rem', marginBottom: '1.5rem' }}>Add New Project</h2>
+              <div style={styles.formGrid}>
+                <div style={styles.formGroupFull}>
+                  <label style={styles.label}>Project Name *</label>
+                  <input
+                    type="text"
+                    value={newProject.name}
+                    onChange={(e) => setNewProject({...newProject, name: e.target.value})}
+                    style={styles.input}
+                    placeholder="Enter project name"
+                  />
+                </div>
+                <div style={styles.formGroup}>
+                  <label style={styles.label}>Project Manager *</label>
+                  <select
+                    value={newProject.pmId}
+                    onChange={(e) => setNewProject({...newProject, pmId: e.target.value})}
+                    style={styles.input}
+                  >
+                    <option value="">Select PM</option>
+                    {projectManagers.map(pm => (
+                      <option key={pm._id} value={pm._id}>{pm.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div style={styles.formGroup}>
+                  <label style={styles.label}>Priority</label>
+                  <select
+                    value={newProject.priority}
+                    onChange={(e) => setNewProject({...newProject, priority: e.target.value})}
+                    style={styles.input}
+                  >
+                    <option value="Low">Low</option>
+                    <option value="Medium">Medium</option>
+                    <option value="High">High</option>
+                    <option value="Critical">Critical</option>
+                  </select>
+                </div>
+                <div style={styles.formGroup}>
+                  <label style={styles.label}>Type</label>
+                  <select
+                    value={newProject.type}
+                    onChange={(e) => setNewProject({...newProject, type: e.target.value})}
+                    style={styles.input}
+                  >
+                    <option value="Internal">Internal</option>
+                    <option value="Infrastructure">Infrastructure</option>
+                    <option value="Product">Product</option>
+                    <option value="Compliance">Compliance</option>
+                  </select>
+                </div>
+                <div style={styles.formGroup}>
+                  <label style={styles.label}>Branch</label>
+                  <select
+                    value={newProject.branch}
+                    onChange={(e) => setNewProject({...newProject, branch: e.target.value})}
+                    style={styles.input}
+                  >
+                    <option value="Technology">Technology</option>
+                    <option value="Engineering">Engineering</option>
+                    <option value="Mobile">Mobile</option>
+                    <option value="Data">Data</option>
+                  </select>
+                </div>
+                <div style={styles.formGroup}>
+                  <label style={styles.label}>Budget (Crores)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={newProject.budget}
+                    onChange={(e) => setNewProject({...newProject, budget: e.target.value})}
+                    style={styles.input}
+                    placeholder="0.00"
+                  />
+                </div>
+                <div style={styles.formGroup}>
+                  <label style={styles.label}>Start Date</label>
+                  <input
+                    type="date"
+                    value={newProject.startDate}
+                    onChange={(e) => setNewProject({...newProject, startDate: e.target.value})}
+                    style={styles.input}
+                  />
+                </div>
+                <div style={styles.formGroup}>
+                  <label style={styles.label}>End Date</label>
+                  <input
+                    type="date"
+                    value={newProject.endDate}
+                    onChange={(e) => setNewProject({...newProject, endDate: e.target.value})}
+                    style={styles.input}
+                  />
+                </div>
+              </div>
+              <div style={styles.modalFooter}>
+                <button style={styles.btnSecondary} onClick={() => setShowAddProjectModal(false)}>
+                  Cancel
+                </button>
+                <button style={styles.btnPrimary} onClick={handleAddProject}>
+                  Add Project
+                </button>
+              </div>
+            </Modal>
+          )}
+
+          {showAddPMModal && (
+            <Modal onClose={() => setShowAddPMModal(false)}>
+              <h2 style={{ fontSize: '1.5rem', marginBottom: '1.5rem' }}>Add Project Manager</h2>
+              <div style={styles.formGrid}>
+                <div style={styles.formGroupFull}>
+                  <label style={styles.label}>Full Name *</label>
+                  <input
+                    type="text"
+                    value={newPM.name}
+                    onChange={(e) => setNewPM({...newPM, name: e.target.value})}
+                    style={styles.input}
+                    placeholder="Enter full name"
+                  />
+                </div>
+                <div style={styles.formGroup}>
+                  <label style={styles.label}>Email *</label>
+                  <input
+                    type="email"
+                    value={newPM.email}
+                    onChange={(e) => setNewPM({...newPM, email: e.target.value})}
+                    style={styles.input}
+                    placeholder="email@company.com"
+                  />
+                </div>
+                <div style={styles.formGroup}>
+                  <label style={styles.label}>Phone</label>
+                  <input
+                    type="tel"
+                    value={newPM.phone}
+                    onChange={(e) => setNewPM({...newPM, phone: e.target.value})}
+                    style={styles.input}
+                    placeholder="+1-234-567-8900"
+                  />
+                </div>
+              </div>
+              <div style={styles.modalFooter}>
+                <button style={styles.btnSecondary} onClick={() => setShowAddPMModal(false)}>
+                  Cancel
+                </button>
+                <button style={styles.btnPrimary} onClick={handleAddPM}>
+                  Add PM
+                </button>
+              </div>
+            </Modal>
+          )}
+
+          {showProjectDetailModal && selectedProject && (
+            <Modal onClose={() => setShowProjectDetailModal(false)} large>
+              <h2 style={{ fontSize: '1.5rem', marginBottom: '0.5rem' }}>{selectedProject.name}</h2>
+              <p style={{ color: '#6e6e73', marginBottom: '1.5rem' }}>{selectedProject.caseId}</p>
+              
+              <div style={{ display: 'flex', gap: '1rem', marginBottom: '2rem' }}>
+                <span style={getPriorityBadgeStyle(selectedProject.priority)}>
+                  {selectedProject.priority}
+                </span>
+                <span style={getStatusBadgeStyle(selectedProject.status)}>
+                  {selectedProject.status}
+                </span>
+                <span style={getHealthBadgeStyle(selectedProject.health)}>
+                  {selectedProject.health}
+                </span>
+              </div>
+
+              <div style={{ marginBottom: '2rem' }}>
+                <h3 style={{ fontSize: '1.1rem', marginBottom: '1rem' }}>Project Information</h3>
+                <div style={styles.detailGrid}>
+                  <div>
+                    <div style={styles.detailLabel}>Project Manager</div>
+                    <div style={styles.detailValue}>{selectedProject.pmId?.name || 'Unassigned'}</div>
+                  </div>
+                  <div>
+                    <div style={styles.detailLabel}>Branch</div>
+                    <div style={styles.detailValue}>{selectedProject.branch}</div>
+                  </div>
+                  <div>
+                    <div style={styles.detailLabel}>Type</div>
+                    <div style={styles.detailValue}>{selectedProject.type}</div>
+                  </div>
+                  <div>
+                    <div style={styles.detailLabel}>Budget</div>
+                    <div style={styles.detailValue}>
+                      Rs {(selectedProject.budget / 100000).toFixed(2)} Cr
+                    </div>
+                  </div>
+                  <div>
+                    <div style={styles.detailLabel}>Progress</div>
+                    <div style={styles.detailValue}>{selectedProject.progress}%</div>
+                  </div>
+                  <div>
+                    <div style={styles.detailLabel}>Start Date</div>
+                    <div style={styles.detailValue}>
+                      {new Date(selectedProject.startDate).toLocaleDateString()}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {(user.role === 'PMO') && (
+                <div style={styles.modalFooter}>
+                  <button
+                    style={styles.btnDanger}
+                    onClick={() => handleDeleteProject(selectedProject._id)}
+                  >
+                    <Trash2 size={16} />
+                    <span>Delete Project</span>
+                  </button>
+                </div>
+              )}
+            </Modal>
+          )}
+        </div>
+      );
+    }
+
+    // Modal Component
+    function Modal({ children, onClose, large }) {
+      return (
+        <div style={styles.modalOverlay} onClick={onClose}>
+          <div
+            style={large ? {...styles.modalContent, maxWidth: '900px'} : styles.modalContent}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button style={styles.closeBtn} onClick={onClose}>
+              <X size={20} />
+            </button>
+            <div style={{ padding: '2rem' }}>
+              {children}
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // Helper Functions
+    function getStatusBadgeStyle(status, additionalClass) {
+      const base = {
+        display: 'inline-block',
+        padding: '0.35rem 0.75rem',
+        borderRadius: '6px',
+        fontSize: '0.75rem',
+        fontWeight: 600,
+        textTransform: 'capitalize'
+      };
+
+      if (additionalClass === 'small') {
+        base.padding = '0.25rem 0.5rem';
+        base.fontSize = '0.7rem';
+      }
+
+      if (additionalClass === 'rejected' || status === 'Cancelled' || status === 'Over-allocated') {
+        return { ...base, background: '#ffe0e0', color: '#c41e3a' };
+      }
+      if (additionalClass === 'partial' || status === 'In Progress' || status === 'Optimal') {
+        return { ...base, background: '#fff4e6', color: '#e67700' };
+      }
+      if (additionalClass === 'approved' || status === 'Completed') {
+        return { ...base, background: '#d1f4e0', color: '#0c6b39' };
+      }
+      if (additionalClass === 'pending' || status === 'Planning' || status === 'Under-utilized') {
+        return { ...base, background: '#e6f0ff', color: '#0056b3' };
+      }
+      return base;
+    }
+
+    function getPriorityBadgeStyle(priority) {
+      const base = {
+        padding: '0.5rem 1rem',
+        borderRadius: '8px',
+        fontSize: '0.85rem',
+        fontWeight: 700,
+        textTransform: 'uppercase'
+      };
+
+      if (priority === 'Critical') return { ...base, background: '#ffe0e0', color: '#c41e3a' };
+      if (priority === 'High') return { ...base, background: '#fff4e6', color: '#e67700' };
+      if (priority === 'Medium') return { ...base, background: '#e6f0ff', color: '#0056b3' };
+      return { ...base, background: '#f5f5f7', color: '#6e6e73' };
+    }
+
+    function getHealthBadgeStyle(health) {
+      const base = {
+        padding: '0.5rem 1rem',
+        borderRadius: '8px',
+        fontSize: '0.85rem',
+        fontWeight: 700
+      };
+
+      if (health === 'On Track') return { ...base, background: '#d1f4e0', color: '#0c6b39' };
+      if (health === 'At Risk') return { ...base, background: '#ffe0e0', color: '#c41e3a' };
+      return base;
+    }
+
+    function getUtilizationColor(statusClass) {
+      if (statusClass === 'approved') return { background: '#34c759' };
+      if (statusClass === 'partial') return { background: '#ff9500' };
+      if (statusClass === 'rejected') return { background: '#dc2626' };
+      return { background: '#007aff' };
+    }
+
+    // Styles Object
+    const styles = {
+      app: { minHeight: '100vh', display: 'flex', flexDirection: 'column' },
+      header: { background: 'white', borderBottom: '1px solid #e5e5e7', padding: '0 2rem', height: '70px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' },
+      headerLeft: { display: 'flex', alignItems: 'center' },
+      headerRight: { display: 'flex', alignItems: 'center', gap: '1rem' },
+      logo: { display: 'flex', alignItems: 'center', gap: '0.75rem' },
+      logoTitle: { fontSize: '1.1rem', fontWeight: 700, color: '#8B1538', letterSpacing: '-0.5px' },
+      logoSubtitle: { fontSize: '0.7rem', color: '#6e6e73', textTransform: 'uppercase', letterSpacing: '1px' },
+      userName: { fontSize: '0.95rem', fontWeight: 500 },
+      userRoleBadge: { padding: '0.35rem 0.75rem', background: '#f5f5f7', borderRadius: '6px', fontSize: '0.75rem', fontWeight: 600, color: '#6e6e73' },
+      userAvatar: { width: '36px', height: '36px', background: '#8B1538', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 600, fontSize: '0.85rem' },
+      logoutBtn: { padding: '0.5rem', background: 'transparent', border: 'none', cursor: 'pointer', borderRadius: '6px', display: 'flex', alignItems: 'center' },
+      nav: { background: 'white', borderBottom: '1px solid #e5e5e7', padding: '0 2rem', display: 'flex', gap: '0.5rem' },
+      navBtn: { padding: '1rem 1.5rem', background: 'transparent', border: 'none', borderBottom: '3px solid transparent', color: '#6e6e73', fontSize: '0.95rem', fontWeight: 500, cursor: 'pointer' },
+      navBtnActive: { padding: '1rem 1.5rem', background: 'transparent', border: 'none', borderBottom: '3px solid #8B1538', color: '#8B1538', fontSize: '0.95rem', fontWeight: 500, cursor: 'pointer' },
+      main: { flex: 1, padding: '2rem', maxWidth: '1600px', width: '100%', margin: '0 auto' },
+      pageHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '2rem' },
+      pageTitle: { fontSize: '1.75rem', fontWeight: 600, marginBottom: '0.25rem' },
+      pageSubtitle: { fontSize: '0.95rem', color: '#6e6e73' },
+      btnPrimary: { display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.75rem 1.25rem', background: '#8B1538', color: 'white', border: 'none', borderRadius: '8px', fontSize: '0.9rem', fontWeight: 600, cursor: 'pointer' },
+      btnSecondary: { padding: '0.75rem 1.25rem', background: 'white', color: '#1d1d1f', border: '1px solid #d2d2d7', borderRadius: '8px', fontSize: '0.9rem', fontWeight: 600, cursor: 'pointer' },
+      btnDanger: { display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.75rem 1.25rem', background: 'white', color: '#dc2626', border: '1px solid #dc2626', borderRadius: '8px', fontSize: '0.9rem', fontWeight: 600, cursor: 'pointer' },
+      statsGrid: { display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: '1.5rem', marginBottom: '2rem' },
+      statCard: { background: 'white', border: '1px solid #e5e5e7', borderRadius: '12px', padding: '1.5rem', textAlign: 'center' },
+      statValue: { fontSize: '2.5rem', fontWeight: 700, marginBottom: '0.5rem' },
+      statLabel: { fontSize: '0.75rem', color: '#6e6e73', textTransform: 'uppercase', letterSpacing: '0.5px', fontWeight: 600' },
+      statGreen: { color: '#34c759' },
+      statOrange: { color: '#ff9500' },
+      statRed: { color: '#dc2626' },
+      statBlue: { color: '#007aff' },
+      filtersBar: { background: 'white', border: '1px solid #e5e5e7', borderRadius: '12px', padding: '1rem 1.5rem', display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1.5rem' },
+      filtersLabel: { fontWeight: 600 },
+      searchBox: { flex: 1, maxWidth: '300px', position: 'relative', display: 'flex', alignItems: 'center' },
+      searchInput: { width: '100%', padding: '0.65rem 0.75rem 0.65rem 2.5rem', border: '1px solid #d2d2d7', borderRadius: '8px', fontSize: '0.9rem' },
+      filterSelect: { padding: '0.65rem 0.75rem', border: '1px solid #d2d2d7', borderRadius: '8px', fontSize: '0.9rem', cursor: 'pointer' },
+      clearBtn: { padding: '0.65rem 1rem', background: 'transparent', color: '#8B1538', border: 'none', borderRadius: '8px', fontSize: '0.9rem', fontWeight: 600, cursor: 'pointer' },
+      tableContainer: { background: 'white', border: '1px solid #e5e5e7', borderRadius: '12px', overflow: 'hidden' },
+      tableHeader: { background: '#f9f2f4', padding: '1rem 1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #e5e5e7' },
+      tableTitle: { fontSize: '1.1rem', fontWeight: 600, color: '#8B1538' },
+      refreshBtn: { display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.5rem 1rem', background: 'white', border: '1px solid #d2d2d7', borderRadius: '8px', fontSize: '0.85rem', cursor: 'pointer' },
+      table: { width: '100%', borderCollapse: 'collapse' },
+      th: { textAlign: 'left', padding: '1rem 1.5rem', fontSize: '0.75rem', fontWeight: 700, color: '#8B1538', textTransform: 'uppercase', cursor: 'pointer', background: '#f5f5f7' },
+      tr: { borderBottom: '1px solid #f5f5f7', cursor: 'pointer' },
+      td: { padding: '1rem 1.5rem', fontSize: '0.9rem' },
+      tatBadge: { display: 'inline-block', padding: '0.35rem 0.75rem', background: '#d1f4e0', color: '#0c6b39', borderRadius: '6px', fontSize: '0.75rem', fontWeight: 600' },
+      menuBtn: { padding: '0.35rem', background: 'transparent', border: 'none', borderRadius: '6px', cursor: 'pointer' },
+      utilizationBar: { flex: 1, height: '8px', background: '#f5f5f7', borderRadius: '10px', overflow: 'hidden' },
+      utilizationFill: { height: '100%', borderRadius: '10px', transition: 'width 0.3s' },
+      pmGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(350px, 1fr))', gap: '1.5rem' },
+      pmCard: { background: 'white', border: '1px solid #e5e5e7', borderRadius: '12px', padding: '1.5rem' },
+      pmHeader: { display: 'flex', gap: '1rem', marginBottom: '1.5rem', paddingBottom: '1.5rem', borderBottom: '1px solid #f5f5f7' },
+      pmAvatar: { width: '60px', height: '60px', background: '#8B1538', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 700, fontSize: '1.25rem' },
+      pmStats: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1.5rem', paddingBottom: '1.5rem', borderBottom: '1px solid #f5f5f7' },
+      pmProjectItem: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.75rem', background: '#fafafa', borderRadius: '8px', fontSize: '0.9rem' },
+      modalOverlay: { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0, 0, 0, 0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '2rem' },
+      modalContent: { background: 'white', borderRadius: '16px', width: '100%', maxWidth: '600px', maxHeight: '90vh', overflowY: 'auto', position: 'relative' },
+      closeBtn: { position: 'absolute', top: '1rem', right: '1rem', padding: '0.5rem', background: '#f5f5f7', border: 'none', borderRadius: '8px', cursor: 'pointer' },
+      modalFooter: { display: 'flex', justifyContent: 'flex-end', gap: '1rem', marginTop: '2rem', paddingTop: '1.5rem', borderTop: '1px solid #e5e5e7' },
+      formGrid: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' },
+      formGroup: { display: 'flex', flexDirection: 'column', gap: '0.5rem' },
+      formGroupFull: { display: 'flex', flexDirection: 'column', gap: '0.5rem', gridColumn: '1 / -1' },
+      label: { fontSize: '0.9rem', fontWeight: 600 },
+      input: { padding: '0.75rem', border: '1px solid #d2d2d7', borderRadius: '8px', fontSize: '0.9rem' },
+      detailGrid: { display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1.5rem' },
+      detailLabel: { fontSize: '0.8rem', color: '#6e6e73', textTransform: 'uppercase', fontWeight: 600, marginBottom: '0.5rem' },
+      detailValue: { fontSize: '0.95rem', fontWeight: 600 },
+      loading: { display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', fontSize: '1.5rem', color: '#6e6e73' },
+      loginContainer: { display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', background: 'linear-gradient(135deg, #f5f5f7 0%, #e5e5e7 100%)' },
+      loginBox: { background: 'white', borderRadius: '16px', padding: '3rem', width: '100%', maxWidth: '450px', boxShadow: '0 10px 40px rgba(0,0,0,0.1)' },
+      loginHeader: { textAlign: 'center', marginBottom: '2rem' },
+      loginTitle: { fontSize: '1.75rem', fontWeight: 700, color: '#8B1538', marginTop: '1rem', marginBottom: '0.5rem' },
+      loginSubtitle: { fontSize: '0.95rem', color: '#6e6e73' },
+      loginForm: { display: 'flex', flexDirection: 'column', gap: '1.5rem' },
+      loginButton: { padding: '1rem', background: '#8B1538', color: 'white', border: 'none', borderRadius: '8px', fontSize: '1rem', fontWeight: 600, cursor: 'pointer' },
+      setupLink: { textAlign: 'center', fontSize: '0.9rem', color: '#6e6e73' },
+      linkButton: { background: 'transparent', border: 'none', color: '#8B1538', fontWeight: 600, cursor: 'pointer', textDecoration: 'underline', marginTop: '0.5rem' },
+      error: { padding: '0.75rem', background: '#ffe0e0', color: '#c41e3a', borderRadius: '8px', fontSize: '0.9rem' },
+      setupBox: { textAlign: 'center' }
+    };
+
+    // Main App
+    function App() {
+      const [user, setUser] = useState(null);
+      const [isLoading, setIsLoading] = useState(true);
+
+      useEffect(() => {
+        const token = localStorage.getItem('token');
+        const savedUser = localStorage.getItem('user');
+        
+        if (token && savedUser) {
+          setUser(JSON.parse(savedUser));
+        }
+        setIsLoading(false);
+      }, []);
+
+      const handleLogin = (userData) => {
+        setUser(userData);
+      };
+
+      const handleLogout = () => {
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+        setUser(null);
+      };
+
+      if (isLoading) {
+        return <div style={styles.loading}>Loading...</div>;
+      }
+
+      return user ? (
+        <PMOApp user={user} onLogout={handleLogout} />
+      ) : (
+        <LoginPage onLogin={handleLogin} />
+      );
+    }
+
+    // Render
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
+</body>
+</html>
