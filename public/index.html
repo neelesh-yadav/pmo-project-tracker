@@ -694,7 +694,9 @@
                     return (
                       <div key={pm._id} style={styles.pmCard}>
                         <div style={styles.pmHeader}>
-                          <div style={styles.pmAvatar}>{pm.initials}</div>
+                          <div style={styles.pmAvatar}>
+                            {pm.name ? pm.name.split(' ').map(n => n[0]).join('').toUpperCase() : 'PM'}
+                          </div>
                           <div>
                             <h3 style={{ fontSize: '1.1rem', marginBottom: '0.5rem' }}>{pm.name}</h3>
                             <p style={{ fontSize: '0.85rem', color: '#6e6e73', marginBottom: '0.25rem' }}>{pm.email}</p>
