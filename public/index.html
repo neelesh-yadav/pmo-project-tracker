@@ -406,7 +406,9 @@
             <div style={styles.headerRight}>
               <span style={styles.userName}>{user.name}</span>
               <div style={styles.userRoleBadge}>{user.role}</div>
-              <div style={styles.userAvatar}>{user.initials}</div>
+              <div style={styles.userAvatar}>
+                {user.name ? user.name.charAt(0).toUpperCase() : 'U'}
+              </div>
               <button onClick={onLogout} style={styles.logoutBtn}>
                 <LogOut size={16} />
               </button>
